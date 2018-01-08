@@ -93,7 +93,7 @@ public class BaseStation  {
 		int i = 0;
 		String arg;
 		while (i < args.length && args[i].startsWith("-")) {
-			arg = args[i++];
+			arg = args[i];
 			if (args[i].equals("-o")) {
 				PORT_NAME = args[++i];
 			} 
