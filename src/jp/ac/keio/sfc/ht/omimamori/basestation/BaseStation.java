@@ -2,13 +2,15 @@
  * Copyright (C) 2017  @author Yin Chen <yin@ht.sfc.keio.ac.jp>
  * Keio University, Japan
  */
-package jp.ac.keio.sfc.ht.omimamori;
+package jp.ac.keio.sfc.ht.omimamori.basestation;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.util.Enumeration;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.TooManyListenersException;
 
 import org.slf4j.Logger;
@@ -23,30 +25,35 @@ import gnu.io.SerialPortEvent;
 import gnu.io.SerialPortEventListener;
 import gnu.io.UnsupportedCommOperationException;
 
+import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEvent;
+import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEventListener;
+
 
 
 /**
  * @author Yin Chen <yin@ht.sfc.keio.ac.jp>
  *
  */
-public class BaseStation {
+public class BaseStation  {
 	
 
 	final static Logger logger = LoggerFactory.getLogger(BaseStation.class);
 	protected static  int TIME_OUT = 10000;  // time out for serial connecting to omimamori receiver
-	protected static int BAUD_RATE = 38400; //baud rate of omimamori receiver
-	protected static String PORT_NAME = "/dev/ttyUSB7";  // serial port name
+	public static int BAUD_RATE = 38400; //baud rate of omimamori receiver
+	public static String PORT_NAME = "/dev/ttyWISUN";  // serial port name
 	SerialPort serialPort = null;
+	private List<BaseStationEventListener> sensorEventListenerList = new LinkedList<BaseStationEventListener>();
+	
 	
 	protected SerialReader reader;
 	protected SerialWriter writer;
 	
-	protected static void parseOptions(String[] args) {
+	public static void parseOptions(String[] args) {
 
-		String usage = "Usage: java -jar ConvertorServer.jar  -o <portName> -b <baudRate>";
+		String usage = "Usage: java -jar %s  -o <portName> -b <baudRate>";
 		if (args.length == 0) {
 			System.err.println("ERROR: arguments required!");
-			System.err.println(usage);
+			System.err.println(String.format(usage, args[0]));
 			System.exit(1);
 		}
 		for (int i = 0; i < args.length; i++) {
@@ -56,7 +63,7 @@ public class BaseStation {
 				BAUD_RATE = Integer.parseInt(args[++i]);
 			} else {
 				System.err.println("ERROR: invalid option " + args[i]);
-				System.err.println(usage);
+				System.err.println(String.format(usage, args[0]));
 				System.exit(1);
 			}
 		}
@@ -72,9 +79,9 @@ public class BaseStation {
 		try {
 			logger.info("Connect to Omimamori receiver at serial port {} baudrate {} with waiting time {} milisecs", PORT_NAME, BAUD_RATE, TIME_OUT);
 			serialPort = openSerialPort(PORT_NAME, BAUD_RATE, TIME_OUT);
-			reader = new SerialReader(serialPort.getInputStream());
+			reader = new SerialReader(serialPort.getInputStream(),this);
 
-			writer = new SerialWriter(serialPort.getOutputStream());
+			writer = new SerialWriter(serialPort.getOutputStream(),this);
 
 			serialPort.addEventListener(reader);
 
@@ -95,8 +102,28 @@ public class BaseStation {
 	
 	
 	
+	public void addSensorEventListener(BaseStationEventListener lsnr) throws TooManyListenersException {
+		if (!sensorEventListenerList.contains(lsnr)) {
+			if (!sensorEventListenerList.add(lsnr)) {
+				throw new TooManyListenersException("Adding sensor event failed!");
+			}
+		}
+	}
 
+	public void removeSensorEventListener(BaseStationEventListener lsnr) {
+		sensorEventListenerList.remove(lsnr);
+	}
 
+	public void clearSensorEventListener() {
+		logger.info("Clear all sensor event listeners!...");
+		sensorEventListenerList.clear();
+	}
+
+	protected void triggerEventHandler(BaseStationEvent ev) throws Exception {
+		for (BaseStationEventListener lsnr : sensorEventListenerList) {
+			lsnr.handleEvent(ev);
+		}
+	}
 
 	
     /**
@@ -105,12 +132,14 @@ public class BaseStation {
      */
     public static class SerialReader implements SerialPortEventListener 
     {
-        private InputStream in;
+        private BaseStation owner;
+    	private InputStream in;
         private byte[] buffer = new byte[1024];
         
-        public SerialReader ( InputStream in )
+        public SerialReader ( InputStream in, BaseStation b )
         {
             this.in = in;
+            this.owner = b;
         }
         
         public void serialEvent(SerialPortEvent event) {
@@ -131,7 +160,15 @@ public class BaseStation {
                     pre_data = data;
                 }
                 //String cmd = String.format("%s,%s", LocalDateTime.now(), new String(buffer,0,len-1));
-                System.out.println(LocalDateTime.now()+","+new String(buffer,0,len-1));
+                
+                String cmd = new String(buffer,0,len-1);
+                logger.info(cmd);
+                try {
+					owner.triggerEventHandler(new BaseStationEvent(this, cmd));
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					logger.error("Trigger Event failed",e);
+				}
                 
                 
                 
@@ -140,7 +177,7 @@ public class BaseStation {
             }
             catch ( IOException e )
             {
-                e.printStackTrace();
+                logger.error("I/O Err", e);
                 System.exit(-1);
             }             
         }
@@ -162,11 +199,13 @@ public class BaseStation {
     /** */
     public static class SerialWriter implements Runnable 
     {
-        OutputStream out;
+    	private BaseStation owner;
+    	OutputStream out;
         
-        public SerialWriter ( OutputStream out )
+        public SerialWriter ( OutputStream out, BaseStation bs)
         {
             this.out = out;
+            this.owner = bs;
         }
         
         public void run ()
