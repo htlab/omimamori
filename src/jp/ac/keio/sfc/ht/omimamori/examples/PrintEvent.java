@@ -26,9 +26,31 @@ public class PrintEvent implements BaseStationEventListener {
 	public static void main(String[] args) {
 		
 		
-		BaseStation.parseOptions(args);
+		String PORT_NAME = "/dev/WiSUN";
+		int BAUND_RATE = 38400;
+		int TIME_OUT = 10000;
+		String usage = "Usage: java -jar ConvertorServer.jar  -o <portName> -b <baudRate>";
+		if (args.length == 0) {
+			System.err.println("ERROR: arguments required!");
+			System.err.println(usage);
+			System.exit(1);
+		}
+		for (int i = 0; i < args.length; i++) {
+			if (args[i].equals("-o")) {
+				PORT_NAME = args[++i];
+			} else if (args[i].equals("-b")) {
+				BAUND_RATE = Integer.parseInt(args[++i]);
+			} else {
+				System.err.println("ERROR: invalid option " + args[i]);
+				System.err.println(usage);
+				System.exit(1);
+			}
+		}
+		BaseStation bs = new BaseStation(PORT_NAME,BAUND_RATE,TIME_OUT);
+		
+		
 		PrintEvent printer = new PrintEvent();
-		BaseStation bs = new BaseStation();
+
 		try {
 			bs.addSensorEventListener(printer);
 		} catch (TooManyListenersException e1) {

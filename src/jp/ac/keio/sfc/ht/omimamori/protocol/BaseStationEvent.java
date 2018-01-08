@@ -12,15 +12,15 @@ import java.util.EventObject;
  */
 public class BaseStationEvent extends EventObject {
 	
-	String raw;
-	String cmd;
-	String version;
-	String tr_mac;
-	double rssi;
-	String pan_id;
-	int seq_num;
-	String payload_IE;
-	String payload;
+	public String raw;
+	public String cmd;
+	public String version;
+	public String tr_mac;
+	public double rssi;
+	public String pan_id;
+	public int seq_num;
+	public String payload_IE;
+	public String payload;
 	
 	/**
 	 * @param source
