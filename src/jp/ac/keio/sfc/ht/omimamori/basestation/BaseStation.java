@@ -9,10 +9,13 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.util.Enumeration;
+import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.TooManyListenersException;
 
+import org.eclipse.paho.mqttsn.udpclient.MqttsCallback;
+import org.eclipse.paho.mqttsn.udpclient.MqttsClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,38 +39,110 @@ import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEventListener;
  */
 public class BaseStation  {
 	
-
+//Logger
 	final static Logger logger = LoggerFactory.getLogger(BaseStation.class);
+	
+//Serial port related
 	protected static  int TIME_OUT = 10000;  // time out for serial connecting to omimamori receiver
 	public static int BAUD_RATE = 38400; //baud rate of omimamori receiver
 	public static String PORT_NAME = "/dev/ttyWISUN";  // serial port name
 	SerialPort serialPort = null;
 	private List<BaseStationEventListener> sensorEventListenerList = new LinkedList<BaseStationEventListener>();
-	
-	
 	protected SerialReader reader;
 	protected SerialWriter writer;
+
+//MQTT related
+	
+
+	static 	String srv = "localhost"; 	// default gateway
+	static	int port = 20000; 			// default port
+	static	String clientId = "mqtts_console_" + System.currentTimeMillis(); 		// default client id
+	static	boolean cleanStart=false;
+
+	static	int maxMqttsMsgLength=60;
+	static	int minMqttsMsgLength=2;
+	static	int maxRetries=2;
+	static	int ackTime=3;
+	static	boolean autoReconnect=true;
+
+
+	
+	
 	
 	public static void parseOptions(String[] args) {
 
-		String usage = "Usage: java -jar %s  -o <portName> -b <baudRate>";
+		String usage = "Usage: java -jar %s "
+				+ "-o <serial port> "
+				+ "-b <baudRate> "
+				+ "-s <MQTT-SN gateway> "
+				+ "-p <gateway port> "
+				+ "-id <client id> "
+				+ "-cs <0 = false: else true>"
+				+ "-autoReconnect <0 = false: else true>";
 		if (args.length == 0) {
 			System.err.println("ERROR: arguments required!");
 			System.err.println(String.format(usage, args[0]));
 			System.exit(1);
 		}
-		for (int i = 0; i < args.length; i++) {
+
+		
+		
+
+		// parse command line arguments -s server -p port -id clientId
+		// and overwrite default values if present
+		int i = 0;
+		String arg;
+		while (i < args.length && args[i].startsWith("-")) {
+			arg = args[i++];
 			if (args[i].equals("-o")) {
 				PORT_NAME = args[++i];
-			} else if (args[i].equals("-b")) {
+			} 
+			if (args[i].equals("-b")) {
 				BAUD_RATE = Integer.parseInt(args[++i]);
-			} else {
-				System.err.println("ERROR: invalid option " + args[i]);
-				System.err.println(String.format(usage, args[0]));
-				System.exit(1);
+			} 
+			
+			if (arg.equals("-s")) {
+				srv = args[i++];
+			}
+			if (arg.equals("-p")) {
+				port = Integer.parseInt(args[i++]);
+			}
+			if (arg.equals("-id")) {
+				clientId = args[i++];
+			}
+			if (arg.equals("-cs")) {
+				int cs=Integer.parseInt(args[i++]);
+				if(cs==0) cleanStart=false; else cleanStart=true;
+			}
+/*			if (arg.equals("-log")) {
+				try {
+					ClientLogger.setLogFile(args[i++]);
+				} catch (MqttsException e) {
+					e.printStackTrace();
+				} 
+			}
+			if (arg.equals("-level")) {
+				ClientLogger.setLogLevel(Integer.parseInt(args[i++]));	
+			}*/
+			if (arg.equals("-autoReconnect")) {
+				if (args[i++].equals("0")) autoReconnect=false;
+				else autoReconnect=true;
 			}
 		}
 	}
+	
+	public static void main ( String[] args ){
+		parseOptions(args);
+		new BaseStation();
+		while(true){
+			try {
+				Thread.sleep(10 * 1000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+    }
 	
 	/**
 	 * 
@@ -89,6 +164,17 @@ public class BaseStation  {
 			logger.error("Connection to Omimamori receiver failed!", e);
 			System.exit(-1);
 		} 
+		try {
+			logger.info("Connect to MQTT-SN gateway  {} at port  {} with waiting time {} milisecs", srv, port);
+			
+			// create console and launch the thread
+			MQTTSNPublisher pub = new MQTTSNPublisher(srv,port,clientId,cleanStart,
+					maxMqttsMsgLength,minMqttsMsgLength,maxRetries,ackTime,autoReconnect);
+		} catch (Exception e) {
+			logger.error("Connection to Omimamori receiver failed!", e);
+			System.exit(-1);
+		} 
+		
 
 		logger.info("Connection succeeded!");
 		
@@ -98,10 +184,7 @@ public class BaseStation  {
 
 		//(new Thread(this)).start();
 	}
-
-	
-	
-	
+		
 	public void addSensorEventListener(BaseStationEventListener lsnr) throws TooManyListenersException {
 		if (!sensorEventListenerList.contains(lsnr)) {
 			if (!sensorEventListenerList.add(lsnr)) {
@@ -261,16 +344,190 @@ public class BaseStation  {
 
 
 		
-	public static void main ( String[] args ){
-		parseOptions(args);
-		new BaseStation();
-		while(true){
-			try {
-				Thread.sleep(10 * 1000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+
+	public static class MQTTSNPublisher implements  MqttsCallback{
+		
+		static private BaseStation owner;
+		// MQTT related
+		private MqttsClient mqClient; 	// client
+
+		protected String server; 			// name of server hosting the broker
+		protected int port; 				// broker's port
+		protected String mqttsClientId; 		// client id
+		private boolean mqttsCleanStart=false;
+		private short mqttsKeepAliveDuration = 600; // seconds
+
+		private int maxMqttsMsgLength;  	//bytes
+		private int minMqttsMsgLength;	//bytes
+		private int maxRetries;
+		private int ackTime;				//seconds
+
+		protected boolean connected; 		// true if connected to a broker
+		protected Hashtable<Integer, String> topicTable;
+		private String tName;
+
+		private boolean pubFlag;   //indicates a pub has to be sent when REGACK is received
+		private String pubTopic;
+		private byte[] pubMsg;
+		private int pubQos;
+		private boolean pubRetained;
+
+		private boolean autoReconnect=false;
+		
+		/* 
+		 * Constructor
+		 * initialize fields and connect to broker
+		 */
+
+		public MQTTSNPublisher(String server, int port, String clientId, boolean cleanStart,
+				int maxMqttsMsgLength, int minMqttsMsgLength, 
+				int maxRetries, int ackWaitingTime, boolean autoReconnect) {
+
+			this.topicTable = new Hashtable<Integer, String>();
+			this.pubFlag = false; this.pubTopic = null;
+			this.server = server;
+			this.port = port;
+			this.mqttsClientId = clientId;
+			this.mqttsCleanStart= cleanStart;
+
+			this.maxMqttsMsgLength= maxMqttsMsgLength;
+			this.minMqttsMsgLength= minMqttsMsgLength;
+			this.maxRetries= maxRetries;
+			this.ackTime= ackWaitingTime;
+
+			this.autoReconnect=autoReconnect;
+
+			this.connected = false;
+
+			mqClient = new MqttsClient (this.server ,this.port,
+					this.maxMqttsMsgLength, this.minMqttsMsgLength, 
+					this.maxRetries, this.ackTime, this.autoReconnect);
+			mqClient.registerHandler(this);
+
+			logger.info("mqttsn java client version "+
+					MqttsClient.version + " started, ");
+			if (autoReconnect) logger.info("autoreconnect= true");
+			else logger.info("autoreconnect= false");
+			System.out.println("");
+
+			connect();		
+
 		}
-    }
+		
+		public void connect() {
+			try {
+				if (mqClient == null) {
+					logger.info("Starting MQTTS-SN java client version "+
+							MqttsClient.version);
+					mqClient = new MqttsClient (this.server ,this.port,
+							maxMqttsMsgLength, minMqttsMsgLength, maxRetries,
+							ackTime);
+					mqClient.registerHandler(this);
+				}
+				//			cleanStart= false;
+				//mqClient.connect(this.mqttsClientId,mqttsCleanStart,mqttsKeepAliveDuration);
+				mqClient.connect(this.mqttsClientId,mqttsCleanStart,mqttsKeepAliveDuration,
+						"down",1,this.mqttsClientId,true);
+			} catch (Exception e){
+				connected = false;
+				logger.error("connection to " + server + " failed!");
+				logger.error("exception: ", e); 
+				//System.out.println("Exiting ... ");
+				//System.exit(0);
+			}	
+		}
+		
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#publishArrived(boolean, int, int, byte[])
+		 */
+		@Override
+		public int publishArrived(boolean retain, int QoS, int topicId, byte[] thisPayload) {
+			// TODO Auto-generated method stub
+			return 0;
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#connected()
+		 */
+		@Override
+		public void connected() {
+			// TODO Auto-generated method stub
+			
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#disconnected(int)
+		 */
+		@Override
+		public void disconnected(int returnType) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#unsubackReceived()
+		 */
+		@Override
+		public void unsubackReceived() {
+			// TODO Auto-generated method stub
+			
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#subackReceived(int, int, int)
+		 */
+		@Override
+		public void subackReceived(int grandesQos, int topicId, int returnCode) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#pubCompReceived()
+		 */
+		@Override
+		public void pubCompReceived() {
+			// TODO Auto-generated method stub
+			
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#pubAckReceived(int, int)
+		 */
+		@Override
+		public void pubAckReceived(int topicId, int returnCode) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#regAckReceived(int, int)
+		 */
+		@Override
+		public void regAckReceived(int topicId, int returnCode) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#registerReceived(int, java.lang.String)
+		 */
+		@Override
+		public void registerReceived(int topicId, String topicName) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		/* (non-Javadoc)
+		 * @see org.eclipse.paho.mqttsn.udpclient.MqttsCallback#connectSent()
+		 */
+		@Override
+		public void connectSent() {
+			// TODO Auto-generated method stub
+			
+		}
+		
+	}
+
+	
 }
