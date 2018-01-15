@@ -4,6 +4,8 @@
  */
 package jp.ac.keio.sfc.ht.omimamori.MQTTSN;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.TooManyListenersException;
@@ -14,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jp.ac.keio.sfc.ht.omimamori.basestation.BaseStation;
+import jp.ac.keio.sfc.ht.omimamori.exceptions.OMIException;
 import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEvent;
 import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEventListener;
 
@@ -57,7 +60,7 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 
 	protected  static int TIME_OUT = 10000;  // time out for serial connecting to omimamori receiver
 	protected  static int BAUD_RATE = 38400; //baud rate of omimamori receiver
-	protected  static String PORT_NAME = "/dev/ttyUSB7";  // serial port name
+	protected  static String PORT_NAME = "/dev/ttyWISUN";  // serial port name
 	
 	private BaseStation bs;
 	
@@ -96,57 +99,64 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 
 		// parse command line arguments -s server -p port -id clientId
 		// and overwrite default values if present
-		int i = 0;
-		String arg;
-		while (i < args.length) {
-			arg = args[i++];
+		
+		for (int i = 0; i < args.length; i++) {
 			if (args[i].equals("-o")) {
 				PORT_NAME = args[++i];
-			} 
-			if (args[i].equals("-b")) {
+			} else  if (args[i].equals("-b")) {
 				BAUD_RATE = Integer.parseInt(args[++i]);
-			} 
-			
-			if (arg.equals("-s")) {
-				srv = args[i++];
-			}
-			if (arg.equals("-p")) {
-				port = Integer.parseInt(args[i++]);
-			}
-			if (arg.equals("-id")) {
-				clientId = args[i++];
-			}
-			if (arg.equals("-cs")) {
-				int cs=Integer.parseInt(args[i++]);
+			} else if (args[i].equals("-s")) {
+				srv = args[++i];
+			}else if (args[i].equals("-p")) {
+				port = Integer.parseInt(args[++i]);
+			}else if (args[i].equals("-id")) {
+				clientId = args[++i];
+			}else if (args[i].equals("-cs")) {
+				int cs=Integer.parseInt(args[++i]);
 				if(cs==0) cleanStart=false; else cleanStart=true;
 			}
-/*			if (arg.equals("-log")) {
+/*			else if (arg.equals("-log")) {
 				try {
 					ClientLogger.setLogFile(args[i++]);
 				} catch (MqttsException e) {
 					e.printStackTrace();
 				} 
 			}
-			if (arg.equals("-level")) {
+			else if (arg.equals("-level")) {
 				ClientLogger.setLogLevel(Integer.parseInt(args[i++]));	
 			}*/
-			if (arg.equals("-autoReconnect")) {
-				if (args[i++].equals("0")) autoReconnect=false;
+			else if (args[i].equals("-autoReconnect")) {
+				if (args[++i].equals("0")) autoReconnect=false;
 				else autoReconnect=true;
 			}
+			else {
+				System.err.println("ERROR: invalid option " + args[i]);
+				System.err.println(usage);
+				System.exit(1);
+			}
 		}
+		
+		
+		
+	
+		
+		
 		MQTTSNPublisher pub;
 
+		
+		logger.info("Connect to MQTT-SN gateway  {} at port  {} with waiting time {} milisecs", srv, port);
+		
+		// create console and launch the thread
 		try {
-				logger.info("Connect to MQTT-SN gateway  {} at port  {} with waiting time {} milisecs", srv, port);
-				
-				// create console and launch the thread
-				pub = new MQTTSNPublisher(srv,port,clientId,cleanStart,
-						maxMqttsMsgLength,minMqttsMsgLength,maxRetries,ackTime,autoReconnect);
-		} catch (Exception e) {
-				logger.error("Connection to MQTT-SN gateway failed!", e);
-				System.exit(-1);
-		} 
+			pub = new MQTTSNPublisher(srv,port,clientId,cleanStart,
+					maxMqttsMsgLength,minMqttsMsgLength,maxRetries,ackTime,autoReconnect);
+		} catch (OMIException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		
+	
+		
 
 		
 		
@@ -168,7 +178,7 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 
 	public MQTTSNPublisher(String server, int port, String clientId, boolean cleanStart,
 			int maxMqttsMsgLength, int minMqttsMsgLength, 
-			int maxRetries, int ackWaitingTime, boolean autoReconnect) {
+			int maxRetries, int ackWaitingTime, boolean autoReconnect) throws OMIException {
 
 		this.topicTable = new Hashtable<Integer, String>();
 		this.pubFlag = false; this.pubTopic = null;
@@ -202,17 +212,19 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 		this.bs = new BaseStation(PORT_NAME, BAUD_RATE);
 		
 		try {
+			
 			bs.addSensorEventListener(this);
 		} catch (TooManyListenersException e) {
-			logger.error("Add eventlistener failed!", e);
-			System.exit(-1);
-		}
+						
+			throw new OMIException("Add eventlistener failed!",e);
+			
+		} 
 		
 				
 
 	}
 	
-	public void connect() {
+	public void connect() throws OMIException {
 		try {
 			if (mqClient == null) {
 				logger.info("Starting MQTTS-SN java client version "+
@@ -228,8 +240,8 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 					"down",1,this.mqttsClientId,true);
 		} catch (Exception e){
 			connected = false;
-			logger.error("connection to " + server + " failed!");
-			logger.error("exception: ", e); 
+			throw new OMIException("connection to " + server + " failed!",e);
+			//logger.error("exception: ", e); 
 			//System.out.println("Exiting ... ");
 			//System.exit(0);
 		}	
@@ -276,9 +288,14 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 		}
 		return retVal;
 	}
-	public void register(String topicName) {
-		mqClient.register(topicName);
-		this.tName = topicName;
+	public boolean register(String topicName) {
+		
+		boolean regValue;
+		regValue = mqClient.register(topicName);
+		if (regValue){
+			this.tName = topicName;
+		}
+		return regValue;
 	}
 	
 	/* (non-Javadoc)
@@ -387,12 +404,68 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 	@Override
 	public void handleEvent(BaseStationEvent ev) throws Exception {
 		String top = "/omimamori/" + mqttsClientId;
+		int pubInterval = 200;
 		
-		//this.publish(top+"/mac", ev.tr_mac, 2, false);
-		this.publish(top+"/rssi", Double.toString(ev.rssi), 2, false);
-		//this.publish(top+"/pan_id", ev.pan_id, 2, false);
-		//this.publish(top+"/seq_num", Integer.toString(ev.seq_num), 2, false);
 		
+		boolean res;
+		
+		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
+		LocalDateTime now = LocalDateTime.now();
+		
+		
+		for (int count = 0;  count < 5; count++){
+			Thread.sleep(pubInterval);
+			res =  this.publish(top+"/mac", ev.tr_mac, 2, false);
+			
+			if (!res){
+				
+			}else{
+				break;
+			} 
+		}
+		
+		for (int count = 0;  count < 5; count++){
+			Thread.sleep(pubInterval);
+			res =  this.publish(top+"/rssi", Double.toString(ev.rssi), 2, false);
+			if (!res){
+				
+			}else{
+				break;
+			} 
+		}
+		
+		for (int count = 0;  count < 5; count++){
+			Thread.sleep(pubInterval);
+			res =  this.publish(top+"/pan_id", ev.pan_id, 2, false);
+			if (!res){
+				
+			}else{
+				break;
+			} 
+		}
+		
+		for (int count = 0;  count < 5; count++){
+			Thread.sleep(pubInterval);
+			res =  this.publish(top+"/seq_num", Integer.toString(ev.seq_num), 2, false);
+			if (!res){
+				
+			}else{
+				break;
+			} 
+		}
+		
+		for (int count = 0;  count < 5; count++){
+			Thread.sleep(pubInterval);
+			res =  this.publish(top+"/timestampe", now.toString(), 2, false);
+			if (!res){
+				
+			}else{
+				break;
+			} 
+		}
+		
+
+
 		
 		
 	}

@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jp.ac.keio.sfc.ht.omimamori.basestation.BaseStation;
+import jp.ac.keio.sfc.ht.omimamori.exceptions.OMIException;
 import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEvent;
 import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEventListener;
 
@@ -46,18 +47,21 @@ public class PrintEvent implements BaseStationEventListener {
 				System.exit(1);
 			}
 		}
-		BaseStation bs = new BaseStation(PORT_NAME,BAUND_RATE,TIME_OUT);
-		
-		
+		BaseStation bs;
 		PrintEvent printer = new PrintEvent();
 
 		try {
+		
+			bs = new BaseStation(PORT_NAME,BAUND_RATE,TIME_OUT);
 			bs.addSensorEventListener(printer);
 		} catch (TooManyListenersException e1) {
 						
 			logger.error("Add eventlistener failed!", e1);
 			System.exit(-1);
 			
+		} catch (OMIException e) {
+			logger.error(e.getMessage(), e);
+			System.exit(-1);
 		}
 		
 		while(true){

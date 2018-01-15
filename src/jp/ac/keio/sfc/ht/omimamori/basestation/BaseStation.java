@@ -24,7 +24,7 @@ import gnu.io.SerialPort;
 import gnu.io.SerialPortEvent;
 import gnu.io.SerialPortEventListener;
 import gnu.io.UnsupportedCommOperationException;
-
+import jp.ac.keio.sfc.ht.omimamori.exceptions.OMIException;
 import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEvent;
 import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEventListener;
 
@@ -51,12 +51,17 @@ public class BaseStation  {
 	
 	
     /**
+     * @throws OMIException 
      *
      */
-    public BaseStation(String port, int baund_rate){
+    public BaseStation(String port, int baund_rate) throws OMIException{
         this(port,baund_rate, 10000);
     }
-    public BaseStation(String port, int baund_rate, int time_out ) {
+    /**
+     * @throws OMIException 
+     *
+     */
+    public BaseStation(String port, int baund_rate, int time_out ) throws OMIException {
         // TODO Auto-generated constructor stub
         super();
         
@@ -75,7 +80,8 @@ public class BaseStation  {
             
         } catch (Exception e) {
             logger.error("Connection to Omimamori receiver failed!", e);
-            System.exit(-1);
+            throw new OMIException("Connection to Omimamori receiver failed!",e);
+            
         }
         
         logger.info("Connection succeeded!");
@@ -271,7 +277,14 @@ public class BaseStation  {
                 System.exit(1);
             }
         }
-        new BaseStation(PORT_NAME,BAUND_RATE,TIME_OUT);
+        
+        try {
+			new BaseStation(PORT_NAME,BAUND_RATE,TIME_OUT);
+		} catch (OMIException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+			System.exit(-1);
+		}
         while(true){
             try {
                 Thread.sleep(10 * 1000);
