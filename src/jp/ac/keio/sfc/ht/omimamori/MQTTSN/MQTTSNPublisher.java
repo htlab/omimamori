@@ -271,7 +271,7 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 		int topicID = ret.intValue();
 		if (topicID == -1) { //topic not in topicTable, have to register it
 			register(topic);
-			pubFlag = true;  //set the flag and wait for REG ACK
+			pubFlag = false;  //set the flag and wait for REG ACK
 			pubTopic= topic; //store the values for later publish
 			pubMsg = msg;
 			pubQos = qos;
@@ -403,17 +403,18 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 	 */
 	@Override
 	public void handleEvent(BaseStationEvent ev) throws Exception {
-		String top = "/omimamori/" + mqttsClientId;
+		
+
+		String top = "/" + mqttsClientId + "/" + ev.tr_mac;
 		int pubInterval = 200;
 		
 		
 		boolean res;
 		
-		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-		LocalDateTime now = LocalDateTime.now();
+				
 		
 		
-		for (int count = 0;  count < 5; count++){
+/*		for (int count = 0;  count < 5; count++){
 			Thread.sleep(pubInterval);
 			res =  this.publish(top+"/mac", ev.tr_mac, 2, false);
 			
@@ -422,7 +423,7 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 			}else{
 				break;
 			} 
-		}
+		}*/
 		
 		for (int count = 0;  count < 5; count++){
 			Thread.sleep(pubInterval);
@@ -456,7 +457,7 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 		
 		for (int count = 0;  count < 5; count++){
 			Thread.sleep(pubInterval);
-			res =  this.publish(top+"/timestampe", now.toString(), 2, false);
+			res =  this.publish(top+"/timestampe", ev.timestamp, 2, false);
 			if (!res){
 				
 			}else{
