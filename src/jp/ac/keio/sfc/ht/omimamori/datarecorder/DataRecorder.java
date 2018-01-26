@@ -26,9 +26,7 @@ public class DataRecorder implements MqttCallback {
 	// Private instance variables
 	private IMqttClient 		client;
 	private String 				brokerUrl;
-	private boolean 			quietMode;
 	private MqttConnectOptions 	conOpt;
-	private boolean 			clean;
 	private String password;
 	private String userName;
 	private String topic;
@@ -43,13 +41,13 @@ public class DataRecorder implements MqttCallback {
 	public DataRecorder(String url, String clientId, String userName, String password, String topic) {
 		// TODO Auto-generated constructor stub
 		this.brokerUrl = url;
-    	this.quietMode = quietMode;
+    	
     	this.password = password;
     	this.userName = userName;
     	this.topic = topic;
 		try {
 			MemoryPersistence persistence = new MemoryPersistence();
-			client = new MqttClient(url, clientId, persistence);
+			client = new MqttClient(brokerUrl, clientId, persistence);
 			client.setCallback(this);
 			
 			conOpt = new MqttConnectOptions();
