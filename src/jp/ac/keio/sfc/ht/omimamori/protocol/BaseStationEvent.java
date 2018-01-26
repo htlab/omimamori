@@ -21,12 +21,12 @@ public class BaseStationEvent extends EventObject {
 	public int seq_num;
 	public String payload_IE;
 	public String payload;
-	public String timestamp;
+	public long timestamp;
 	
 	/**
 	 * @param source
 	 */
-	public BaseStationEvent(Object source, String rawcmd, String timestamp) {
+	public BaseStationEvent(Object source, String rawcmd, long timestamp) {
 		super(source);
 		this.timestamp = timestamp;
 		BaseStationCMD.parseCMD(rawcmd ,this);

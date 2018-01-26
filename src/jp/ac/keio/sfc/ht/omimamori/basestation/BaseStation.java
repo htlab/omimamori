@@ -141,8 +141,7 @@ public class BaseStation  {
             int data;
             int pre_data = 0x0A;
             
-            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-    		LocalDateTime now = LocalDateTime.now();
+            long now = System.currentTimeMillis();
             
             try
             {
@@ -161,7 +160,7 @@ public class BaseStation  {
                 String cmd = new String(buffer,0,len-1);
                 logger.info(cmd);
                 try {
-					owner.triggerEventHandler(new BaseStationEvent(this, cmd, now.toString()));
+					owner.triggerEventHandler(new BaseStationEvent(this, cmd, now));
 				} catch (Exception e) {
 					// TODO Auto-generated catch block
 					logger.error("Trigger Event failed",e);
