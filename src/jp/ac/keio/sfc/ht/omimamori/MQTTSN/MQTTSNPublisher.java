@@ -9,6 +9,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.TooManyListenersException;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
+
+import javax.lang.model.util.ElementKindVisitor6;
 
 import org.eclipse.paho.mqttsn.udpclient.MqttsCallback;
 import org.eclipse.paho.mqttsn.udpclient.MqttsClient;
@@ -24,7 +29,7 @@ import jp.ac.keio.sfc.ht.omimamori.protocol.BaseStationEventListener;
  * @author Yin Chen <yin@ht.sfc.keio.ac.jp>
  *
  */
-public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
+public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback,Runnable{
 
 	//Logger
 	final static Logger logger = LoggerFactory.getLogger(MQTTSNPublisher.class);
@@ -54,6 +59,9 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 	private boolean pubRetained;
 
 	private boolean autoReconnect=false;
+	
+	BlockingQueue<BaseStationEvent> buffer;
+	
 	
 	
 //Serial port related	
@@ -150,24 +158,18 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 		try {
 			pub = new MQTTSNPublisher(srv,port,clientId,cleanStart,
 					maxMqttsMsgLength,minMqttsMsgLength,maxRetries,ackTime,autoReconnect);
+			new Thread(pub).run();
 		} catch (OMIException e1) {
 			// TODO Auto-generated catch block
-			e1.printStackTrace();
+			logger.error("MQTTSNPublisher Initializaion failed", e1);
+			System.exit(-1);
+			
 		}
 		
-	
+		
+		
 		
 
-		
-		
-		while(true){
-			try {
-				Thread.sleep(10 * 1000);
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
     }
 	
 	
@@ -207,7 +209,12 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 		else logger.info("autoreconnect= false");
 
 		
+		
+		
+		
 		connect();
+		
+		this.buffer = new LinkedBlockingDeque<BaseStationEvent> ();
 		
 		this.bs = new BaseStation(PORT_NAME, BAUD_RATE);
 		
@@ -403,70 +410,47 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback{
 	 */
 	@Override
 	public void handleEvent(BaseStationEvent ev) throws Exception {
+		logger.info( "Received: " + ev.toString());	
+		buffer.put(ev);
 		
+	}
 
-		String top = "/" + mqttsClientId + "/" + ev.tr_mac;
+
+	/* (non-Javadoc)
+	 * @see java.lang.Runnable#run()
+	 */
+	@Override
+	public void run() {
+		
+		BaseStationEvent ev;
+		String topic, msg;
 		int pubInterval = 200;
 		
-		
 		boolean res;
-		
+		while(true){
+			try{
+				ev = buffer.take();
+				topic = "/" + mqttsClientId + "/" + ev.tr_mac ;
 				
-		
-		
-/*		for (int count = 0;  count < 5; count++){
-			Thread.sleep(pubInterval);
-			res =  this.publish(top+"/mac", ev.tr_mac, 2, false);
+				msg = ev.seq_num + " " + Double.toString(ev.rssi) +  " " + Long.toString(ev.timestamp);
+				logger.info("Publishing: " + topic + " "+ msg);
+				for(int count = 0;  count < 100; count++){
+					Thread.sleep(pubInterval * count);
+					res =  this.publish(topic, msg, 2, true);
+					if (!res){				
+						
+					}else{
+						break;
+					} 
+				}				
+			}catch (Throwable t){
+				logger.error("Publishing failed",t);
+			}
 			
-			if (!res){
-				
-			}else{
-				break;
-			} 
-		}*/
-		
-		for (int count = 0;  count < 5; count++){
-			Thread.sleep(pubInterval);
-			res =  this.publish(top+"/rssi", Double.toString(ev.rssi), 2, false);
-			if (!res){
-				
-			}else{
-				break;
-			} 
+			
 		}
 		
-		for (int count = 0;  count < 5; count++){
-			Thread.sleep(pubInterval);
-			res =  this.publish(top+"/pan_id", ev.pan_id, 2, false);
-			if (!res){
 				
-			}else{
-				break;
-			} 
-		}
-		
-		for (int count = 0;  count < 5; count++){
-			Thread.sleep(pubInterval);
-			res =  this.publish(top+"/seq_num", Integer.toString(ev.seq_num), 2, false);
-			if (!res){
-				
-			}else{
-				break;
-			} 
-		}
-		
-		for (int count = 0;  count < 5; count++){
-			Thread.sleep(pubInterval);
-			res =  this.publish(top+"/timestampe", ev.timestamp, 2, false);
-			if (!res){
-				
-			}else{
-				break;
-			} 
-		}
-		
-
-
 		
 		
 	}
