@@ -7,15 +7,11 @@ package jp.ac.keio.sfc.ht.omimamori.MQTTSN;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.TooManyListenersException;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingDeque;
-
-import javax.lang.model.util.ElementKindVisitor6;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import org.eclipse.paho.mqttsn.udpclient.MqttsCallback;
 import org.eclipse.paho.mqttsn.udpclient.MqttsClient;
@@ -216,7 +212,7 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback,
 		
 		connect();
 		
-		this.buffer = new LinkedBlockingDeque<BaseStationEvent> ();
+		this.buffer = new LinkedBlockingQueue<BaseStationEvent> ();
 		
 		this.bs = new BaseStation(PORT_NAME, BAUD_RATE);
 		
