@@ -4,7 +4,9 @@
  */
 package jp.ac.keio.sfc.ht.omimamori.MQTTSN;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -432,7 +434,10 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback,
 				ev = buffer.take();
 				topic = "/" + mqttsClientId + "/" + ev.tr_mac ;
 				
-				msg = ev.seq_num + " " + Double.toString(ev.rssi) +  " " + Long.toString(ev.timestamp);
+				msg = ev.pan_id + " " + ev.seq_num + " " + Double.toString(ev.rssi) +  " " + 
+					    LocalDateTime.ofInstant(Instant.ofEpochMilli(ev.timestamp), ZoneId.systemDefault()); ;
+			    //msg = ev.pan_id + " " + ev.seq_num + " " + Double.toString(ev.rssi) +  " " + ev.timestamp;
+				
 				logger.info("Publishing: " + topic + " "+ msg);
 				for(int count = 0;  count < 100; count++){
 					Thread.sleep(pubInterval * count);
