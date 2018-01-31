@@ -317,8 +317,8 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback,
 	 */
 	@Override
 	public void connected() {
-		// TODO Auto-generated method stub
-		
+		connected = true;
+		logger.info("** connected to " + server +	":" + port + " as " + mqttsClientId);
 	}
 
 	/* (non-Javadoc)
@@ -326,8 +326,17 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback,
 	 */
 	@Override
 	public void disconnected(int returnType) {
-		// TODO Auto-generated method stub
-		
+		connected= false;
+		switch(returnType) {
+		case MqttsCallback.MQTTS_OK:
+			logger.info("** disconnected");
+			break;
+		case MqttsCallback.MQTTS_LOST_GATEWAY:
+			logger.info("** disconnected, no answer from gateway/broker!");
+			break;
+		default:
+			logger.info("** disconnected, unknown cause= " + returnType);
+		}
 	}
 
 	/* (non-Javadoc)
@@ -353,8 +362,7 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback,
 	 */
 	@Override
 	public void pubCompReceived() {
-		// TODO Auto-generated method stub
-		
+
 	}
 
 	/* (non-Javadoc)
@@ -408,7 +416,7 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback,
 	 */
 	@Override
 	public void handleEvent(BaseStationEvent ev) throws Exception {
-		logger.info( "Received: " + ev.toString());	
+		//logger.info( "Received: " + ev.toString());	
 		buffer.put(ev);
 		
 	}
@@ -430,16 +438,18 @@ public class MQTTSNPublisher implements BaseStationEventListener, MqttsCallback,
 				ev = buffer.take();
 				topic = "/" + mqttsClientId + "/" + ev.tr_mac ;
 				
-				msg = ev.pan_id + " " + ev.seq_num + " " + Double.toString(ev.rssi) +  " " + 
+				//msg = ev.pan_id + " " + ev.seq_num + " " + Double.toString(ev.rssi) +  " " + 
 					    LocalDateTime.ofInstant(Instant.ofEpochMilli(ev.timestamp), ZoneId.systemDefault()); ;
-			    //msg = ev.pan_id + " " + ev.seq_num + " " + Double.toString(ev.rssi) +  " " + ev.timestamp;
+			    msg = ev.pan_id + " " + ev.seq_num + " " + Double.toString(ev.rssi) +  " " + ev.timestamp;
 				
-				logger.info("Publishing: " + topic + " "+ msg);
+				//logger.info("Publishing: " + topic + " "+ msg);
 				for(int count = 0;  count < 100; count++){
 					Thread.sleep(pubInterval * count);
 					res =  this.publish(topic, msg, 2, true);
 					if (!res){				
-						
+						if(!this.connected){
+							//TODO handling the event of the gateway shutdown should be implemented
+						}
 					}else{
 						break;
 					} 
