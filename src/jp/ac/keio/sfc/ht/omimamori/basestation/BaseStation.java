@@ -158,7 +158,7 @@ public class BaseStation  {
                 //String cmd = String.format("%s,%s", LocalDateTime.now(), new String(buffer,0,len-1));
                 
                 String cmd = new String(buffer,0,len-1);
-                logger.info(cmd);
+                logger.debug(cmd);
                 try {
 					owner.triggerEventHandler(new BaseStationEvent(this, cmd, now));
 				} catch (Exception e) {
